@@ -39,6 +39,10 @@ def load() -> dict:
         except Exception:
             pass
 
+    # Whitespace aus Pfaden entfernen
+    cfg["addon_path"] = cfg.get("addon_path", "").strip()
+    cfg["api_url"]    = cfg.get("api_url", "").strip()
+
     # Addon-Pfad auto-erkennen falls nicht gesetzt
     if not cfg["addon_path"]:
         cfg["addon_path"] = _detect_wow_path()

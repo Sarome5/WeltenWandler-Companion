@@ -1,5 +1,4 @@
 requests
-sseclient-py
 pystray
 Pillow
 keyring

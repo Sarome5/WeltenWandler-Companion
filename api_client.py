@@ -1,6 +1,7 @@
 import requests
 import keyring
-import sseclient
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 KEYRING_SERVICE = "WRT-Companion"
 KEYRING_TOKEN   = "jwt_token"
@@ -34,21 +35,22 @@ class APIClient:
     # --------------------------------------------------
     # LOGIN
     # --------------------------------------------------
-    def login(self, username: str, password: str) -> bool:
-        """Einloggen und JWT-Token speichern. Gibt True bei Erfolg zurück."""
+    def login(self, username: str, password: str) -> tuple[bool, str]:
+        """Einloggen und JWT-Token speichern. Gibt (True, "") oder (False, Fehlermeldung) zurück."""
         try:
             r = requests.post(
                 f"{self.base_url}/api/companion/login",
                 json={"username": username, "password": password},
                 timeout=10,
+                verify=False,  # Dev-Zertifikate akzeptieren
             )
             if r.status_code == 200:
                 self.token = r.json().get("token")
                 save_token(self.token)
-                return True
-        except Exception:
-            pass
-        return False
+                return True, ""
+            return False, f"HTTP {r.status_code}: {r.text[:200]}"
+        except Exception as e:
+            return False, str(e)
 
     def is_logged_in(self) -> bool:
         return self.token is not None
@@ -67,6 +69,7 @@ class APIClient:
                 f"{self.base_url}/api/companion/raid",
                 headers=self._headers(),
                 timeout=10,
+                verify=False,
             )
             if r.status_code == 200:
                 return r.json()
@@ -86,6 +89,7 @@ class APIClient:
                 f"{self.base_url}/api/companion/stats",
                 headers=self._headers(),
                 timeout=15,
+                verify=False,
             )
             if r.status_code == 200:
                 return r.json()
@@ -96,19 +100,22 @@ class APIClient:
         return None
 
     # --------------------------------------------------
-    # SSE STREAM
+    # POLLING EVENTS
     # --------------------------------------------------
-    def stream(self):
-        """
-        Generator: liefert SSE-Events vom Server.
-        Wirft Exception wenn Verbindung abbricht → Aufrufer reconnectet.
-        """
-        r = requests.get(
-            f"{self.base_url}/api/companion/stream",
-            headers={**self._headers(), "Accept": "text/event-stream"},
-            stream=True,
-            timeout=None,
-        )
-        client = sseclient.SSEClient(r)
-        for event in client.events():
-            yield event
+    def get_events(self, since: int = 0) -> dict | None:
+        """Fragt ab ob seit <since> ein Raid live geschaltet wurde."""
+        try:
+            r = requests.get(
+                f"{self.base_url}/api/companion/events",
+                headers=self._headers(),
+                params={"since": since},
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+        except Exception as e:
+            print(f"[Polling] Fehler: {e}")
+        return None

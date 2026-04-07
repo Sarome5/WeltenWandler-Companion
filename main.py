@@ -9,7 +9,7 @@ import config
 import lua_writer
 import updater
 from api_client  import APIClient
-from sse_listener import SSEListener
+from sse_listener import PollingListener
 from tray        import TrayApp, LoginWindow, SettingsWindow
 
 
@@ -18,7 +18,7 @@ class AppController:
         self.cfg    = config.load()
         self.api    = APIClient(self.cfg["api_url"])
         self.tray   = TrayApp(self)
-        self.sse    = SSEListener(self.api, on_raid_live=self.refresh)
+        self.sse    = PollingListener(self.api, on_raid_live=self.refresh)
         self._stop  = False
 
     # --------------------------------------------------
@@ -49,13 +49,21 @@ class AppController:
     # LOGIN
     # --------------------------------------------------
     def _show_login(self):
-        def do_login(username, password):
-            success = self.api.login(username, password)
+        def do_login(url, username, password):
+            # URL speichern falls geändert
+            if url != self.cfg.get("api_url"):
+                self.cfg["api_url"] = url
+                self.api.base_url   = url
+                config.save(self.cfg)
+
+            success, err = self.api.login(username, password)
             if success:
                 self.tray.set_status("Verbunden")
-            return success
+            else:
+                print(f"[Login] Fehler: {err}")
+            return success, err
 
-        win = LoginWindow(on_login=do_login)
+        win = LoginWindow(on_login=do_login, current_url=self.cfg.get("api_url", "http://localhost:5000"))
         win.show()
 
     # --------------------------------------------------

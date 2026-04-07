@@ -2,18 +2,20 @@ import threading
 import time
 
 
-class SSEListener:
+class PollingListener:
     """
-    Hält eine dauerhafte SSE-Verbindung zur Website.
-    Bei 'raid_live'-Event wird on_raid_live() aufgerufen.
-    Reconnectet automatisch bei Verbindungsabbruch.
+    Fragt alle POLL_INTERVAL Sekunden den /api/companion/events Endpunkt ab.
+    Bei raid_live=true wird on_raid_live() aufgerufen und die Daten aktualisiert.
     """
 
+    POLL_INTERVAL = 120  # Sekunden zwischen Abfragen
+
     def __init__(self, api_client, on_raid_live):
-        self.api        = api_client
+        self.api          = api_client
         self.on_raid_live = on_raid_live
-        self._thread    = None
-        self._running   = False
+        self._thread      = None
+        self._running     = False
+        self._last_check  = 0
 
     def start(self):
         self._running = True
@@ -24,27 +26,15 @@ class SSEListener:
         self._running = False
 
     def _run(self):
-        RECONNECT_DELAY = 30  # Sekunden bis zum nächsten Versuch
-
         while self._running:
-            if not self.api.is_logged_in():
-                time.sleep(10)
-                continue
+            if self.api.is_logged_in():
+                self._poll()
+            time.sleep(self.POLL_INTERVAL)
 
-            try:
-                print("[SSE] Verbinde mit Server-Stream...")
-                for event in self.api.stream():
-                    if not self._running:
-                        return
+    def _poll(self):
+        result = self.api.get_events(since=self._last_check)
+        self._last_check = int(time.time())
 
-                    if event.event == "raid_live":
-                        print("[SSE] raid_live Event empfangen → Daten werden aktualisiert")
-                        self.on_raid_live()
-
-                    elif event.event == "ping":
-                        pass  # Keepalive, ignorieren
-
-            except Exception as e:
-                if self._running:
-                    print(f"[SSE] Verbindung verloren ({e}) – reconnect in {RECONNECT_DELAY}s")
-                    time.sleep(RECONNECT_DELAY)
+        if result and result.get("raid_live"):
+            print("[Polling] Neuer Raid live → Daten werden aktualisiert")
+            self.on_raid_live()

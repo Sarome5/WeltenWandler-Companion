@@ -16,9 +16,10 @@ def _load_icon() -> Image.Image:
 
 
 class LoginWindow:
-    def __init__(self, on_login):
-        self.on_login = on_login
-        self.root = None
+    def __init__(self, on_login, current_url="http://localhost:5000"):
+        self.on_login    = on_login
+        self.current_url = current_url
+        self.root        = None
 
     def show(self):
         if self.root and self.root.winfo_exists():
@@ -27,7 +28,7 @@ class LoginWindow:
 
         self.root = tk.Tk()
         self.root.title("WeltenWandler Companion – Login")
-        self.root.geometry("340x200")
+        self.root.geometry("420x280")
         self.root.resizable(False, False)
         self.root.configure(bg="#1a1a2e")
 
@@ -38,13 +39,20 @@ class LoginWindow:
         frame = tk.Frame(self.root, bg="#1a1a2e")
         frame.pack(padx=20, fill="x")
 
-        tk.Label(frame, text="Benutzername:", bg="#1a1a2e", fg="white").grid(row=0, column=0, sticky="w", pady=4)
-        self.user_var = tk.StringVar()
-        tk.Entry(frame, textvariable=self.user_var, width=22).grid(row=0, column=1, pady=4, padx=(8, 0))
+        tk.Label(frame, text="Server URL:", bg="#1a1a2e", fg="#aaaaaa").grid(row=0, column=0, sticky="w", pady=4)
+        self.url_var = tk.StringVar(value=self.current_url)
+        tk.Entry(frame, textvariable=self.url_var, width=26).grid(row=0, column=1, pady=4, padx=(8, 0))
 
-        tk.Label(frame, text="Passwort:", bg="#1a1a2e", fg="white").grid(row=1, column=0, sticky="w", pady=4)
+        # Trennlinie
+        tk.Frame(frame, bg="#333355", height=1).grid(row=1, columnspan=2, sticky="ew", pady=6)
+
+        tk.Label(frame, text="Benutzername:", bg="#1a1a2e", fg="white").grid(row=2, column=0, sticky="w", pady=4)
+        self.user_var = tk.StringVar()
+        tk.Entry(frame, textvariable=self.user_var, width=26).grid(row=2, column=1, pady=4, padx=(8, 0))
+
+        tk.Label(frame, text="Passwort:", bg="#1a1a2e", fg="white").grid(row=3, column=0, sticky="w", pady=4)
         self.pass_var = tk.StringVar()
-        tk.Entry(frame, textvariable=self.pass_var, show="*", width=22).grid(row=1, column=1, pady=4, padx=(8, 0))
+        tk.Entry(frame, textvariable=self.pass_var, show="*", width=26).grid(row=3, column=1, pady=4, padx=(8, 0))
 
         self.status_var = tk.StringVar()
         tk.Label(self.root, textvariable=self.status_var,
@@ -61,11 +69,15 @@ class LoginWindow:
     def _do_login(self):
         self.status_var.set("Verbinde...")
         self.root.update()
-        success = self.on_login(self.user_var.get(), self.pass_var.get())
+        success, err = self.on_login(
+            self.url_var.get().rstrip("/"),
+            self.user_var.get(),
+            self.pass_var.get()
+        )
         if success:
             self.root.destroy()
         else:
-            self.status_var.set("Login fehlgeschlagen. Bitte prüfe Benutzername und Passwort.")
+            self.status_var.set(err or "Login fehlgeschlagen.")
 
 
 class SettingsWindow:
@@ -96,8 +108,8 @@ class SettingsWindow:
         tk.Entry(frame, textvariable=path_var, width=36).grid(row=1, column=1, pady=6, padx=(8, 0))
 
         def save():
-            self.cfg["api_url"]    = url_var.get().rstrip("/")
-            self.cfg["addon_path"] = path_var.get()
+            self.cfg["api_url"]    = url_var.get().strip().rstrip("/")
+            self.cfg["addon_path"] = path_var.get().strip()
             self.on_save(self.cfg)
             root.destroy()
 
