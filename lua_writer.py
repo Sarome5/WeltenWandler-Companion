@@ -21,51 +21,59 @@ def _lua_number(n) -> str:
 # --------------------------------------------------
 # RAID DATA
 # --------------------------------------------------
-def write_raid(data: dict, addon_path: str) -> bool:
-    """
-    Schreibt data/raid_data.lua in den Addon-Ordner.
-    data: dict vom /api/companion/raid Endpunkt
-    """
-    out_path = os.path.join(addon_path, "data", "raid_data.lua")
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-
-    prio_items = data.get("prioItems") or []
+def _raid_block(raid: dict) -> str:
     prio_lines = []
-    for item in prio_items:
+    for item in (raid.get("prioItems") or []):
         prio_lines.append(
-            "    {{ itemID = {}, itemName = {}, priority = {} }}".format(
+            "      {{ itemID = {}, itemName = {}, priority = {} }}".format(
                 _lua_number(item.get("itemID")),
                 _lua_string(item.get("itemName")),
                 _lua_number(item.get("priority")),
             )
         )
+    return (
+        "  {{\n"
+        "    raidID       = {raidID},\n"
+        "    raidName     = {raidName},\n"
+        "    difficulty   = {difficulty},\n"
+        "    scheduledAt  = {scheduledAt},\n"
+        "    signupStatus = {signupStatus},\n"
+        "    prioFilled   = {prioFilled},\n"
+        "    prioItems    = {{\n{prioItems}\n    }},\n"
+        "  }}"
+    ).format(
+        raidID=_lua_number(raid.get("raidID")),
+        raidName=_lua_string(raid.get("raidName")),
+        difficulty=_lua_string(raid.get("difficulty")),
+        scheduledAt=_lua_number(raid.get("scheduledAt")),
+        signupStatus=_lua_string(raid.get("signupStatus")),
+        prioFilled=_lua_bool(raid.get("prioFilled", False)),
+        prioItems=",\n".join(prio_lines),
+    )
+
+
+def write_raid(data: dict, addon_path: str) -> bool:
+    """Schreibt data/raid_data.lua in den Addon-Ordner."""
+    out_path = os.path.join(addon_path, "data", "raid_data.lua")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    raids = data.get("raids", [])
+    raid_blocks = ",\n".join(_raid_block(r) for r in raids)
 
     lua = """-- Automatisch generiert von WeltenWandler Companion App.
 -- Nicht manuell bearbeiten.
 
 WRT_RaidData = {{
-  version      = {version},
-  generatedAt  = {generatedAt},
-  raidID       = {raidID},
-  raidName     = {raidName},
-  difficulty   = {difficulty},
-  scheduledAt  = {scheduledAt},
-  signupStatus = {signupStatus},
-  prioFilled   = {prioFilled},
-  prioItems    = {{
-{prioItems}
+  version     = {version},
+  generatedAt = {generatedAt},
+  raids = {{
+{raids}
   }},
 }}
 """.format(
         version=_lua_number(data.get("version", 1)),
         generatedAt=_lua_number(int(time.time())),
-        raidID=_lua_number(data.get("raidID")),
-        raidName=_lua_string(data.get("raidName")),
-        difficulty=_lua_string(data.get("difficulty")),
-        scheduledAt=_lua_number(data.get("scheduledAt")),
-        signupStatus=_lua_string(data.get("signupStatus")),
-        prioFilled=_lua_bool(data.get("prioFilled", False)),
-        prioItems=",\n".join(prio_lines),
+        raids=raid_blocks,
     )
 
     try:

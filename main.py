@@ -4,6 +4,7 @@ Verbindet die WeltenWandler Website mit dem WoW Addon.
 """
 import threading
 import time
+from datetime import datetime, timezone
 
 import config
 import lua_writer
@@ -11,6 +12,60 @@ import updater
 from api_client  import APIClient
 from sse_listener import PollingListener
 from tray        import TrayApp, LoginWindow, SettingsWindow
+
+
+DIFFICULTY_MAP = {
+    "normal":  "Normal",
+    "heroic":  "Heroisch",
+    "mythic":  "Mythisch",
+}
+
+SIGNUP_MAP = {
+    "active":    "angemeldet",
+    "late":      "spaeter",
+    "tentative": "vorlaeufig",
+    "bench":     "bench",
+    "absent":    "abgelehnt",
+}
+
+
+def _iso_to_timestamp(iso_str: str) -> int | None:
+    """ISO-Datumsstring → Unix-Timestamp."""
+    if not iso_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return int(dt.timestamp())
+    except Exception:
+        return None
+
+
+def _normalize_single(raid: dict) -> dict:
+    return {
+        "raidID":       raid.get("raidID"),
+        "raidName":     raid.get("raidName"),
+        "difficulty":   DIFFICULTY_MAP.get(raid.get("difficulty", ""), raid.get("difficulty")),
+        "scheduledAt":  _iso_to_timestamp(raid.get("scheduledAt")),
+        "signupStatus": SIGNUP_MAP.get(raid.get("signupStatus", ""), raid.get("signupStatus")),
+        "prioFilled":   raid.get("prioFilled", False),
+        "prioItems":    raid.get("prioItems", []),
+    }
+
+
+def _normalize_raid(raw: dict) -> dict:
+    """API-Antwort in das Format für lua_writer normalisieren."""
+    # Mehrere Raids: { "raids": [...] }
+    if "raids" in raw:
+        return {
+            "version": 1,
+            "raids":   [_normalize_single(r) for r in raw["raids"]],
+        }
+    # Einzelner Raid (Rückwärtskompatibilität): { "raid": {...} }
+    raid = raw.get("raid", raw)
+    return {
+        "version": 1,
+        "raids":   [_normalize_single(raid)],
+    }
 
 
 class AppController:
@@ -95,8 +150,10 @@ class AppController:
         self.tray.set_status("Aktualisiere...")
 
         # Raid-Daten
-        raid_data = self.api.get_raid()
-        if raid_data:
+        raid_raw = self.api.get_raid()
+        print(f"[App] /raid Antwort: {raid_raw}")
+        if raid_raw:
+            raid_data = _normalize_raid(raid_raw)
             ok = lua_writer.write_raid(raid_data, addon_path)
             print(f"[App] raid_data.lua {'geschrieben' if ok else 'FEHLER'}")
 

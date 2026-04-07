@@ -33,8 +33,8 @@ class PollingListener:
 
     def _poll(self):
         result = self.api.get_events(since=self._last_check)
-        self._last_check = int(time.time())
-
-        if result and result.get("raid_live"):
-            print("[Polling] Neuer Raid live → Daten werden aktualisiert")
-            self.on_raid_live()
+        if result:
+            self._last_check = result.get("updated_at", int(time.time()))
+            if result.get("raid_live"):
+                print("[Polling] Neuer Raid live → Daten werden aktualisiert")
+                self.on_raid_live()
