@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Program Files/Warcraft Logs Uploader/**)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(.venv/Scripts/python -c \"import webview; print\\(webview.__version__\\); print\\(webview.guilib\\)\")",
+      "Bash(.venv/Scripts/python -c \"import webview; print\\('v', webview.__version__\\); print\\('backend:', webview.guilib\\)\")"
+    ]
+  }
+}

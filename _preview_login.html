@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d0d0d;
+    --surface:  #161616;
+    --border:   #252525;
+    --gold:     #ffd200;
+    --gold-h:   #ffe040;
+    --text:     #e0e0e0;
+    --muted:    #666;
+    --error:    #f87171;
+    --ok:       #4ade80;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  input {
+    width: 100%;
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 9px 11px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus  { border-color: var(--gold); }
+  input::placeholder { color: #333; }
+
+  .btn {
+    border: none;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.08s;
+    letter-spacing: 0.2px;
+  }
+  .btn:active:not(:disabled) { transform: scale(0.975); }
+
+  .btn-primary {
+    background: var(--gold);
+    color: #080808;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--gold-h); }
+  .btn-primary:disabled { background: #2a2a2a; color: #444; cursor: default; }
+
+  .btn-ghost {
+    background: #1a1a1a;
+    color: #888;
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: #3a3a3a; color: var(--text); }
+
+  .btn-icon {
+    background: #181818;
+    color: #888;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 0 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-icon:hover { border-color: var(--gold); color: var(--gold); }
+
+  .divider {
+    border: none;
+    border-top: 1px solid #1e1e1e;
+    margin: 18px 0;
+  }
+
+  .status-msg {
+    font-size: 12px;
+    min-height: 18px;
+    text-align: center;
+  }
+
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3.5px;
+    text-transform: uppercase;
+    color: #333;
+    margin-bottom: 7px;
+  }
+
+  h1 {
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: -0.3px;
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 26px 28px 22px;
+    width: 340px;
+    /* gold top accent line */
+    box-shadow: inset 0 1px 0 0 rgba(255,210,0,0.25),
+                0 12px 40px rgba(0,0,0,0.7);
+  }
+
+  .field { margin-bottom: 13px; }
+
+  .status-msg { margin-bottom: 10px; }
+
+  .btn-primary { width: 100%; }
+</style>
+</head>
+<body>
+
+  <div class="eyebrow">WeltenWandler</div>
+  <h1>Companion App</h1>
+
+  <div class="card">
+    <div class="field">
+      <label>Server URL</label>
+      <input type="text" id="url" value="http://localhost:5000" placeholder="http://...">
+    </div>
+    <hr class="divider">
+    <div class="field">
+      <label>Benutzername</label>
+      <input type="text" id="username" autocomplete="username" placeholder="Dein Benutzername">
+    </div>
+    <div class="field">
+      <label>Passwort</label>
+      <input type="password" id="password" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
+    </div>
+    <div class="status-msg" id="status" style="color:var(--error);margin-bottom:10px;"></div>
+    <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">Einloggen</button>
+  </div>
+
+  <script>
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    async function doLogin() {
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+      btn.textContent = 'Verbinde…';
+      document.getElementById('status').textContent = '';
+
+      const url      = document.getElementById('url').value.trim();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      try {
+        const r = await window.pywebview.api.login(url, username, password);
+        if (r.success) {
+          document.getElementById('status').style.color = 'var(--ok)';
+          document.getElementById('status').textContent = 'Erfolgreich!';
+        } else {
+          document.getElementById('status').style.color = 'var(--error)';
+          document.getElementById('status').textContent = r.error || 'Login fehlgeschlagen.';
+          btn.disabled = false;
+          btn.textContent = 'Einloggen';
+        }
+      } catch (e) {
+        document.getElementById('status').style.color = 'var(--error)';
+        document.getElementById('status').textContent = 'Verbindungsfehler.';
+        btn.disabled = false;
+        btn.textContent = 'Einloggen';
+      }
+    }
+  </script>
+</body>
+</html>

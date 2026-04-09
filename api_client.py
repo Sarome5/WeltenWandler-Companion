@@ -82,11 +82,229 @@ class APIClient:
     # --------------------------------------------------
     # STATS
     # --------------------------------------------------
-    def get_stats(self) -> dict | None:
+    def get_stats(self, patch_id=None, difficulty=None, loot_scope=None) -> dict | None:
         """Statistiken (Loothistorie, Spieler-Stats, Dropchance) abrufen."""
         try:
+            params = {}
+            if patch_id is not None:
+                params["patch_id"] = patch_id
+            if difficulty and difficulty != "all":
+                params["difficulty"] = difficulty
+            if loot_scope and loot_scope != "all":
+                params["loot_scope"] = loot_scope
             r = requests.get(
                 f"{self.base_url}/api/companion/stats",
+                headers=self._headers(),
+                params=params,
+                timeout=15,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+        except Exception:
+            pass
+        return None
+
+    # --------------------------------------------------
+    # ADMIN
+    # --------------------------------------------------
+    def _admin_get(self, path: str) -> dict | None:
+        try:
+            r = requests.get(f"{self.base_url}/api/companion/admin/{path}",
+                             headers=self._headers(), timeout=15, verify=False)
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+        except Exception:
+            pass
+        return None
+
+    def _admin_post(self, path: str, json_data=None) -> dict:
+        try:
+            r = requests.post(f"{self.base_url}/api/companion/admin/{path}",
+                              headers=self._headers(), json=json_data, timeout=15, verify=False)
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _admin_put(self, path: str, json_data=None) -> dict:
+        try:
+            r = requests.put(f"{self.base_url}/api/companion/admin/{path}",
+                             headers=self._headers(), json=json_data, timeout=15, verify=False)
+            if r.status_code == 200:
+                return r.json()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _admin_delete(self, path: str) -> dict:
+        try:
+            r = requests.delete(f"{self.base_url}/api/companion/admin/{path}",
+                                headers=self._headers(), timeout=15, verify=False)
+            if r.status_code == 200:
+                return r.json()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def admin_get_raids(self)            -> dict | None: return self._admin_get("raids")
+    def admin_get_raid(self, raid_id)    -> dict | None: return self._admin_get(f"raids/{raid_id}")
+    def admin_create_raid(self, data)    -> dict:        return self._admin_post("raids", data)
+    def admin_update_raid(self, rid, d)  -> dict:        return self._admin_put(f"raids/{rid}", d)
+    def admin_toggle_publish(self, rid)  -> dict:        return self._admin_post(f"raids/{rid}/publish")
+    def admin_archive_raid(self, rid)    -> dict:        return self._admin_post(f"raids/{rid}/archive")
+    def admin_get_archive(self)          -> dict | None: return self._admin_get("raids/archive")
+    def admin_unarchive_raid(self, rid)  -> dict:        return self._admin_post(f"raids/{rid}/unarchive")
+    def admin_delete_raid(self, rid)     -> dict:        return self._admin_delete(f"raids/{rid}")
+    def admin_get_users(self)            -> dict | None: return self._admin_get("users")
+    def admin_set_role(self, uid, role)  -> dict:        return self._admin_post(f"users/{uid}/role", {"role": role})
+    def admin_set_prio_cap(self, uid, p) -> dict:        return self._admin_post(f"users/{uid}/prio-cap", {"prio_cap": p})
+    def admin_reset_password(self, uid)  -> dict:        return self._admin_post(f"users/{uid}/reset-password")
+    def admin_delete_user(self, uid)     -> dict:        return self._admin_delete(f"users/{uid}")
+    def admin_get_form_patches(self)     -> list:
+        data = self._admin_get("form-patches")
+        return (data or {}).get("patches", [])
+
+    def get_patches(self) -> list:
+        """Verfügbare Lootlisten (Patches) abrufen."""
+        try:
+            r = requests.get(
+                f"{self.base_url}/api/companion/patches",
+                headers=self._headers(),
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json().get("patches", [])
+            if r.status_code == 401:
+                self.logout()
+        except Exception:
+            pass
+        return []
+
+    # --------------------------------------------------
+    # PROFIL & CHARAKTERE
+    # --------------------------------------------------
+    def get_profile(self) -> dict | None:
+        try:
+            r = requests.get(f"{self.base_url}/api/companion/profile",
+                             headers=self._headers(), timeout=10, verify=False)
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+        except Exception:
+            pass
+        return None
+
+    def get_characters(self) -> list:
+        try:
+            r = requests.get(f"{self.base_url}/api/companion/characters",
+                             headers=self._headers(), timeout=10, verify=False)
+            if r.status_code == 200:
+                return r.json().get("characters", [])
+        except Exception:
+            pass
+        return []
+
+    def create_character(self, name: str, wow_class: str, wow_spec: str) -> dict:
+        try:
+            r = requests.post(f"{self.base_url}/api/companion/characters",
+                              headers=self._headers(),
+                              json={"name": name, "wowClass": wow_class, "wowSpec": wow_spec},
+                              timeout=10, verify=False)
+            if r.status_code in (200, 409):
+                return r.json()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def update_character(self, char_id: int, name: str, wow_class: str, wow_spec: str) -> dict:
+        try:
+            r = requests.put(f"{self.base_url}/api/companion/characters/{char_id}",
+                             headers=self._headers(),
+                             json={"name": name, "wowClass": wow_class, "wowSpec": wow_spec},
+                             timeout=10, verify=False)
+            if r.status_code == 200:
+                return r.json()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def activate_character(self, char_id: int) -> dict:
+        try:
+            r = requests.post(f"{self.base_url}/api/companion/characters/{char_id}/activate",
+                              headers=self._headers(), timeout=10, verify=False)
+            if r.status_code == 200:
+                return r.json()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # --------------------------------------------------
+    # NEWS
+    # --------------------------------------------------
+    def get_pending_news(self) -> dict | None:
+        try:
+            r = requests.get(
+                f"{self.base_url}/api/companion/news/pending",
+                headers=self._headers(),
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json().get("news")
+            if r.status_code == 401:
+                self.logout()
+        except Exception:
+            pass
+        return None
+
+    def confirm_news(self, news_id: int) -> bool:
+        try:
+            r = requests.post(
+                f"{self.base_url}/api/companion/news/{news_id}/confirm",
+                headers=self._headers(),
+                timeout=10,
+                verify=False,
+            )
+            return r.status_code == 200
+        except Exception:
+            return False
+
+    # --------------------------------------------------
+    # SIGNUP / PRIO
+    # --------------------------------------------------
+    def change_signup(self, raid_id: int, status: str) -> dict:
+        try:
+            r = requests.post(
+                f"{self.base_url}/api/companion/raids/{raid_id}/signup",
+                headers=self._headers(),
+                json={"status": status},
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 403:
+                return {"success": False, "error": "deadline_passed"}
+            if r.status_code == 401:
+                self.logout()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_raid_loot(self, raid_id: int) -> dict | None:
+        try:
+            r = requests.get(
+                f"{self.base_url}/api/companion/raids/{raid_id}/loot",
                 headers=self._headers(),
                 timeout=15,
                 verify=False,
@@ -98,6 +316,23 @@ class APIClient:
         except Exception:
             pass
         return None
+
+    def save_prio(self, raid_id: int, difficulty: str, slots: list) -> dict:
+        try:
+            r = requests.post(
+                f"{self.base_url}/api/companion/raids/{raid_id}/prio",
+                headers=self._headers(),
+                json={"difficulty": difficulty, "slots": slots},
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     # --------------------------------------------------
     # POLLING EVENTS

@@ -3,15 +3,15 @@ WeltenWandler Companion App
 Verbindet die WeltenWandler Website mit dem WoW Addon.
 """
 import threading
-import time
 from datetime import datetime, timezone
 
 import config
 import lua_writer
 import updater
-from api_client  import APIClient
+from api_client   import APIClient
+from gui          import GuiManager
 from sse_listener import PollingListener
-from tray        import TrayApp, LoginWindow, SettingsWindow
+from tray         import TrayApp
 
 
 DIFFICULTY_MAP = {
@@ -40,27 +40,40 @@ def _iso_to_timestamp(iso_str: str) -> int | None:
         return None
 
 
+def _normalize_prioitem(item: dict) -> dict:
+    diff_raw = item.get("difficulty") or ""
+    return {
+        "itemID":     item.get("itemID"),
+        "itemName":   item.get("itemName"),
+        "priority":   item.get("priority"),
+        "difficulty": DIFFICULTY_MAP.get(diff_raw, diff_raw) if diff_raw else None,
+    }
+
+
 def _normalize_single(raid: dict) -> dict:
     return {
-        "raidID":       raid.get("raidID"),
-        "raidName":     raid.get("raidName"),
-        "difficulty":   DIFFICULTY_MAP.get(raid.get("difficulty", ""), raid.get("difficulty")),
-        "scheduledAt":  _iso_to_timestamp(raid.get("scheduledAt")),
-        "signupStatus": SIGNUP_MAP.get(raid.get("signupStatus", ""), raid.get("signupStatus")),
-        "prioFilled":   raid.get("prioFilled", False),
-        "prioItems":    raid.get("prioItems", []),
+        "raidID":         raid.get("raidID"),
+        "raidName":       raid.get("raidName"),
+        "difficulty":     DIFFICULTY_MAP.get(raid.get("difficulty", ""), raid.get("difficulty")),
+        "scheduledAt":    _iso_to_timestamp(raid.get("scheduledAt")),
+        "signupStatus":   SIGNUP_MAP.get(raid.get("signupStatus", ""), raid.get("signupStatus")),
+        "prioFilled":     raid.get("prioFilled", False),
+        "prioItems":      [_normalize_prioitem(p) for p in (raid.get("prioItems") or [])],
+        "superPrio":      raid.get("superPrio", False),
+        "deadlinePassed": raid.get("deadlinePassed", False),
+        "characterName":  raid.get("characterName"),
+        "wowClass":       raid.get("wowClass"),
+        "wowSpec":        raid.get("wowSpec"),
     }
 
 
 def _normalize_raid(raw: dict) -> dict:
     """API-Antwort in das Format für lua_writer normalisieren."""
-    # Mehrere Raids: { "raids": [...] }
     if "raids" in raw:
         return {
             "version": 1,
             "raids":   [_normalize_single(r) for r in raw["raids"]],
         }
-    # Einzelner Raid (Rückwärtskompatibilität): { "raid": {...} }
     raid = raw.get("raid", raw)
     return {
         "version": 1,
@@ -70,69 +83,36 @@ def _normalize_raid(raw: dict) -> dict:
 
 class AppController:
     def __init__(self):
-        self.cfg    = config.load()
-        self.api    = APIClient(self.cfg["api_url"])
-        self.tray   = TrayApp(self)
-        self.sse    = PollingListener(self.api, on_raid_live=self.refresh)
-        self._stop  = False
+        self.cfg  = config.load()
+        self.api  = APIClient(self.cfg["api_url"])
+        self.tray = TrayApp(self)
+        self.sse  = PollingListener(self.api, on_raid_live=self.refresh)
+        self.gui  = GuiManager(self)
+        self._stop = False
+
+        # Letzte Raid-/Stats-Daten im Speicher
+        self.last_raid_data:   dict | None = None
+        self.last_update_raid: str         = "–"
+        self.last_update_stats: str        = "–"
 
     # --------------------------------------------------
-    # START
+    # START / STOP
     # --------------------------------------------------
     def run(self):
-        # Falls noch kein Token → Login anzeigen
-        if not self.api.is_logged_in():
-            self._show_login()
-
-        if self.api.is_logged_in():
-            self.tray.set_status("Verbunden")
-            # Sofort einmal aktualisieren
-            threading.Thread(target=self.refresh, daemon=True).start()
-            # SSE-Listener starten
-            self.sse.start()
-        else:
-            self.tray.set_status("Nicht eingeloggt")
-
-        # Tray blockiert bis Beenden gedrückt wird
-        self.tray.run()
+        self.gui.launch()
 
     def stop(self):
         self._stop = True
         self.sse.stop()
 
-    # --------------------------------------------------
-    # LOGIN
-    # --------------------------------------------------
-    def _show_login(self):
-        def do_login(url, username, password):
-            # URL speichern falls geändert
-            if url != self.cfg.get("api_url"):
-                self.cfg["api_url"] = url
-                self.api.base_url   = url
-                config.save(self.cfg)
-
-            success, err = self.api.login(username, password)
-            if success:
-                self.tray.set_status("Verbunden")
-            else:
-                print(f"[Login] Fehler: {err}")
-            return success, err
-
-        win = LoginWindow(on_login=do_login, current_url=self.cfg.get("api_url", "http://localhost:5000"))
-        win.show()
-
-    # --------------------------------------------------
-    # EINSTELLUNGEN
-    # --------------------------------------------------
-    def open_settings(self):
-        def on_save(new_cfg):
-            self.cfg = new_cfg
-            config.save(new_cfg)
-            # API-URL neu setzen
-            self.api.base_url = new_cfg["api_url"]
-
-        win = SettingsWindow(cfg=self.cfg, on_save=on_save)
-        win.show()
+    def quit(self):
+        """Vollständig beenden (GUI + SSE + Tray)."""
+        self.stop()
+        if self.tray.icon:
+            try:
+                self.tray.icon.stop()
+            except Exception:
+                pass
 
     # --------------------------------------------------
     # DATEN AKTUALISIEREN
@@ -140,39 +120,51 @@ class AppController:
     def refresh(self):
         if not self.api.is_logged_in():
             self.tray.set_status("Nicht eingeloggt")
+            self.gui.set_status("status.not_logged_in", state="error")
             return
 
-        addon_path = self.cfg.get("addon_path", "")
+        addon_path = config.get_addon_full(self.cfg)
         if not addon_path:
             self.tray.set_status("Addon-Pfad nicht gesetzt")
+            self.gui.set_status("status.addon_path_missing", "status.addon_path_hint", state="error")
             return
 
         self.tray.set_status("Aktualisiere...")
+        self.gui.set_status("status.updating", self.cfg.get("api_url", ""), state="loading")
 
         # Raid-Daten
         raid_raw = self.api.get_raid()
-        print(f"[App] /raid Antwort: {raid_raw}")
+        raid_ok  = False
         if raid_raw:
             raid_data = _normalize_raid(raid_raw)
-            ok = lua_writer.write_raid(raid_data, addon_path)
-            print(f"[App] raid_data.lua {'geschrieben' if ok else 'FEHLER'}")
+            raid_ok   = lua_writer.write_raid(raid_data, addon_path)
+            if raid_ok:
+                self.last_raid_data   = raid_data
+                self.last_update_raid = datetime.now().strftime("%H:%M:%S")
 
-        # Stats-Daten
+        # Stats-Daten — kein Patch-Filter (Backend unterstützt noch kein Multi-Patch)
         stats_data = self.api.get_stats()
+        stats_ok   = False
         if stats_data:
-            ok = lua_writer.write_stats(stats_data, addon_path)
-            print(f"[App] stats_data.lua {'geschrieben' if ok else 'FEHLER'}")
+            stats_ok = lua_writer.write_stats(stats_data, addon_path)
+            if stats_ok:
+                self.last_update_stats = datetime.now().strftime("%H:%M:%S")
 
-        if raid_data or stats_data:
+        now = datetime.now().strftime("%H:%M:%S")
+        if raid_ok or stats_ok:
             self.tray.set_status("Aktuell")
+            self.gui.set_status("status.up_to_date", self.cfg.get("api_url", ""), state="ok",
+                                last_update=f"Zuletzt: {now}")
         else:
             self.tray.set_status("Fehler beim Abrufen")
+            self.gui.set_status("status.error", "", state="error",
+                                last_update=f"Versuch: {now}")
 
     # --------------------------------------------------
     # UPDATES
     # --------------------------------------------------
     def update_addon(self):
-        addon_path = self.cfg.get("addon_path", "")
+        addon_path = config.get_addon_full(self.cfg)
         if not addon_path:
             return
         self.tray.set_status("Addon wird aktualisiert...")
@@ -181,7 +173,7 @@ class AppController:
 
     def update_self(self):
         self.tray.set_status("App wird aktualisiert...")
-        updater.update_self()  # startet neu wenn erfolgreich
+        updater.update_self()
 
 
 # --------------------------------------------------

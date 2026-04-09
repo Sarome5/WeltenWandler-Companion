@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime, timezone
 
 
 def _lua_string(s) -> str:
@@ -18,6 +19,23 @@ def _lua_number(n) -> str:
     return str(n)
 
 
+def _lua_timestamp(val) -> str:
+    """Konvertiert ISO-8601-String oder Unix-Zahl sicher in einen Lua-Integer-Timestamp."""
+    if val is None:
+        return "nil"
+    if isinstance(val, (int, float)):
+        return str(int(val))
+    if isinstance(val, str):
+        try:
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return str(int(dt.timestamp()))
+        except (ValueError, AttributeError):
+            pass
+    return "nil"
+
+
 # --------------------------------------------------
 # RAID DATA
 # --------------------------------------------------
@@ -25,10 +43,11 @@ def _raid_block(raid: dict) -> str:
     prio_lines = []
     for item in (raid.get("prioItems") or []):
         prio_lines.append(
-            "      {{ itemID = {}, itemName = {}, priority = {} }}".format(
+            "      {{ itemID = {}, itemName = {}, priority = {}, difficulty = {} }}".format(
                 _lua_number(item.get("itemID")),
                 _lua_string(item.get("itemName")),
                 _lua_number(item.get("priority")),
+                _lua_string(item.get("difficulty")),
             )
         )
     return (
@@ -129,7 +148,7 @@ def write_stats(data: dict, addon_path: str) -> bool:
                     _lua_string(h.get("boss")),
                     _lua_string(h.get("raidName")),
                     _lua_string(h.get("lootType")),
-                    _lua_number(h.get("timestamp")),
+                    _lua_timestamp(h.get("timestamp")),
                 )
             )
         ps_blocks.append(
@@ -167,7 +186,7 @@ def write_stats(data: dict, addon_path: str) -> bool:
         for e in (raid.get("entries") or []):
             entry_lines.append(
                 "      {{ timestamp = {}, boss = {}, itemID = {}, itemName = {}, player = {}, lootType = {} }}".format(
-                    _lua_number(e.get("timestamp")),
+                    _lua_timestamp(e.get("timestamp")),
                     _lua_string(e.get("boss")),
                     _lua_number(e.get("itemID")),
                     _lua_string(e.get("itemName")),
@@ -186,7 +205,7 @@ def write_stats(data: dict, addon_path: str) -> bool:
                 _lua_string(raid.get("raidName")),
                 _lua_string(raid.get("date")),
                 _lua_string(raid.get("difficulty")),
-                _lua_number(raid.get("timestamp")),
+                _lua_timestamp(raid.get("timestamp")),
                 ",\n".join(entry_lines),
             )
         )
