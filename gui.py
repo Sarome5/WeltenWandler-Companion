@@ -2529,7 +2529,19 @@ class _MainApi:
 
     def logout(self):
         self._gui.ctrl.api.logout()
-        self._gui._show_login()
+        self._gui.ctrl.sse.stop()
+        # Login-HTML ins bestehende Fenster laden (kein neues Fenster nötig)
+        html = _render(_LOGIN_HTML)
+        self.window.load_html(html)
+
+    def login(self, username, password):
+        """Wird von der Login-Seite nach einem Logout aufgerufen."""
+        success, err = self._gui.ctrl.api.login(username, password)
+        if success:
+            html = _render_main(self._gui.ctrl.cfg.get("language", "de"))
+            self.window.load_html(html)
+            threading.Thread(target=self._gui._post_login, daemon=True).start()
+        return {"success": bool(success), "error": err or ""}
 
     # Aktionen
     def refresh(self):
