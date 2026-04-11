@@ -495,7 +495,7 @@ _MAIN_HTML = """<!DOCTYPE html>
         <div class="settings-row" style="border:none;padding:0">
           <div style="flex:1">
             <div class="input-row">
-              <input type="text" id="addonPath" placeholder="E:\\...\\World of Warcraft\\_retail_">
+              <input type="text" id="addonPath" placeholder="E:\\...\\World of Warcraft\\_retail_" onblur="saveAddonPath()" onkeydown="if(event.key==='Enter')saveAddonPath()">
               <button class="btn-icon" onclick="browseAddon()" data-i18n="btn.browse">Durchsuchen</button>
             </div>
             <div style="font-size:11px;color:var(--muted);margin-top:5px" data-i18n="settings.addon_path_hint">
@@ -582,9 +582,6 @@ _MAIN_HTML = """<!DOCTYPE html>
         </div>
       </div>
 
-      <div style="display:flex;justify-content:flex-end;padding-top:4px">
-        <button class="btn btn-primary" onclick="saveAddonPath()" data-i18n="btn.save">Speichern</button>
-      </div>
 
     </div>
 
@@ -1121,7 +1118,10 @@ _MAIN_HTML = """<!DOCTYPE html>
 
     async function browseAddon() {
       const result = await window.pywebview.api.browse_folder();
-      if (result) document.getElementById("addonPath").value = result;
+      if (result) {
+        document.getElementById("addonPath").value = result;
+        saveAddonPath();
+      }
     }
     async function saveAddonPath() {
       await window.pywebview.api.save_addon_path(document.getElementById("addonPath").value.trim());
@@ -2742,12 +2742,15 @@ class GuiManager:
 
     def quit(self):
         """App sauber beenden (aus Tray-Menü)."""
-        # Alle Fenster schließen → webview.start() kehrt zurück → cleanup in launch()
+        # Cleanup direkt hier — nicht auf webview.start()-Rückkehr warten,
+        # da versteckte Fenster den Qt-Event-Loop nicht beenden.
+        self.ctrl.stop()
         for win in list(webview.windows):
             try:
                 win.destroy()
             except Exception:
                 pass
+        os._exit(0)
 
     # ------------------------------------------------------------------
     # Intern
