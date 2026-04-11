@@ -3,20 +3,31 @@ import os
 import sys
 import winreg
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
+
+def resource_path(relative: str) -> str:
+    """Gibt den korrekten Pfad zu einer eingebetteten Ressource zurück.
+    Im PyInstaller-Build wird sys._MEIPASS verwendet, sonst das Skript-Verzeichnis."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, relative)
+
+
+_CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "WeltenWandler")
+CONFIG_FILE = os.path.join(_CONFIG_DIR, "config.json")
 _APP_NAME   = "WRT Companion"
 
 ADDON_SUBPATH = r"Interface\AddOns\WeltenWandler_Raid_Tool"
 
+API_URL = "https://weltenwandler.cloud"
+
 DEFAULTS = {
-    "api_url":            "http://localhost:5000",
     "addon_path_base":    "",
     "run_on_startup":     False,
     "close_to_tray":      True,
     "addon_autoupdate":   False,
     "language":           "de",
-    "version":            "0.1.0",
+    "version":            "1.0.0",
     "excluded_patch_ids": [],
+    "addon_branch":       "master",
 }
 
 
@@ -52,7 +63,8 @@ def load() -> dict:
         except Exception:
             pass
 
-    cfg["api_url"] = cfg.get("api_url", "").strip()
+    # Migration: altes api_url-Feld entfernen (jetzt hardcoded)
+    cfg.pop("api_url", None)
 
     # Migration: altes addon_path (vollständig) → neues addon_path_base
     old_path = cfg.pop("addon_path", "")
@@ -80,6 +92,7 @@ def load() -> dict:
 
 
 def save(cfg: dict):
+    os.makedirs(_CONFIG_DIR, exist_ok=True)
     # addon_path nicht mehr speichern
     to_save = {k: v for k, v in cfg.items() if k != "addon_path"}
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:

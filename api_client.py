@@ -317,6 +317,23 @@ class APIClient:
             pass
         return None
 
+    def get_prio_list(self, raid_id: int) -> dict | None:
+        """Vollständige Prioliste aller Spieler für einen Raid (nur officer+)."""
+        try:
+            r = requests.get(
+                f"{self.base_url}/api/companion/raids/{raid_id}/full-prios",
+                headers=self._headers(),
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code in (401, 403):
+                pass  # Kein Zugriff → ignorieren
+        except Exception:
+            pass
+        return None
+
     def save_prio(self, raid_id: int, difficulty: str, slots: list) -> dict:
         try:
             r = requests.post(
@@ -354,3 +371,55 @@ class APIClient:
         except Exception as e:
             print(f"[Polling] Fehler: {e}")
         return None
+
+    # --------------------------------------------------
+    # BLACKLIST
+    # --------------------------------------------------
+    def get_blacklist(self) -> list:
+        try:
+            r = requests.get(
+                f"{self.base_url}/api/companion/blacklist",
+                headers=self._headers(),
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json().get("blacklist", [])
+            if r.status_code == 401:
+                self.logout()
+        except Exception:
+            pass
+        return []
+
+    def add_blacklist_item(self, item_id: int, note: str = "") -> dict:
+        try:
+            r = requests.post(
+                f"{self.base_url}/api/companion/blacklist",
+                headers=self._headers(),
+                json={"item_id": item_id, "note": note},
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def remove_blacklist_item(self, bl_id: int) -> dict:
+        try:
+            r = requests.delete(
+                f"{self.base_url}/api/companion/blacklist/{bl_id}",
+                headers=self._headers(),
+                timeout=10,
+                verify=False,
+            )
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 401:
+                self.logout()
+            return {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

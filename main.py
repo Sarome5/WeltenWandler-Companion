@@ -84,9 +84,11 @@ def _normalize_raid(raw: dict) -> dict:
 class AppController:
     def __init__(self):
         self.cfg  = config.load()
-        self.api  = APIClient(self.cfg["api_url"])
+        self.api  = APIClient(config.API_URL)
         self.tray = TrayApp(self)
-        self.sse  = PollingListener(self.api, on_raid_live=self.refresh)
+        self.sse  = PollingListener(self.api, on_raid_live=self.refresh,
+                                    get_next_raid_time=self._get_next_raid_time,
+                                    on_poll=self._check_addon_autoupdate)
         self.gui  = GuiManager(self)
         self._stop = False
 
@@ -94,6 +96,18 @@ class AppController:
         self.last_raid_data:   dict | None = None
         self.last_update_raid: str         = "–"
         self.last_update_stats: str        = "–"
+
+    def _get_next_raid_time(self) -> int | None:
+        """Gibt den Unix-Timestamp des nächsten/aktuellen Raids zurück (für Polling-Intervall)."""
+        if not self.last_raid_data:
+            return None
+        import time as _time
+        now = _time.time()
+        candidates = [
+            r["scheduledAt"] for r in self.last_raid_data.get("raids", [])
+            if r.get("scheduledAt") and r["scheduledAt"] > now - 1800
+        ]
+        return min(candidates) if candidates else None
 
     # --------------------------------------------------
     # START / STOP
@@ -130,30 +144,42 @@ class AppController:
             return
 
         self.tray.set_status("Aktualisiere...")
-        self.gui.set_status("status.updating", self.cfg.get("api_url", ""), state="loading")
+        self.gui.set_status("status.updating", config.API_URL, state="loading")
 
         # Raid-Daten
         raid_raw = self.api.get_raid()
         raid_ok  = False
         if raid_raw:
             raid_data = _normalize_raid(raid_raw)
-            raid_ok   = lua_writer.write_raid(raid_data, addon_path)
+            # Vollständige Prioliste pro Raid nachladen (nur officer+, 403 wird ignoriert)
+            for raid in raid_data.get("raids", []):
+                raid_id  = raid.get("raidID")
+                if raid_id:
+                    prio_raw = self.api.get_prio_list(raid_id)
+                    if prio_raw:
+                        raid["prioList"]  = prio_raw.get("prios", [])
+                        raid["superPrio"] = prio_raw.get("superprio", False)
+            raid_ok = lua_writer.write_raid(raid_data, addon_path)
             if raid_ok:
                 self.last_raid_data   = raid_data
                 self.last_update_raid = datetime.now().strftime("%H:%M:%S")
 
-        # Stats-Daten — kein Patch-Filter (Backend unterstützt noch kein Multi-Patch)
-        stats_data = self.api.get_stats()
-        stats_ok   = False
-        if stats_data:
-            stats_ok = lua_writer.write_stats(stats_data, addon_path)
+        # Stats-Daten: ein API-Call, Aggregation erfolgt client-seitig im Addon
+        stats_ok  = False
+        stats_raw = self.api.get_stats()
+        if stats_raw:
+            stats_ok = lua_writer.write_stats(stats_raw, addon_path)
             if stats_ok:
                 self.last_update_stats = datetime.now().strftime("%H:%M:%S")
+
+        # Blacklist
+        blacklist = self.api.get_blacklist()
+        lua_writer.write_blacklist(blacklist, addon_path)
 
         now = datetime.now().strftime("%H:%M:%S")
         if raid_ok or stats_ok:
             self.tray.set_status("Aktuell")
-            self.gui.set_status("status.up_to_date", self.cfg.get("api_url", ""), state="ok",
+            self.gui.set_status("status.up_to_date", config.API_URL, state="ok",
                                 last_update=f"Zuletzt: {now}")
         else:
             self.tray.set_status("Fehler beim Abrufen")
@@ -163,12 +189,27 @@ class AppController:
     # --------------------------------------------------
     # UPDATES
     # --------------------------------------------------
+    def _check_addon_autoupdate(self):
+        """Wird bei jedem Poll-Zyklus aufgerufen – installiert Update wenn verfügbar."""
+        if not self.cfg.get("addon_autoupdate"):
+            return
+        addon_path = config.get_addon_full(self.cfg)
+        if not addon_path:
+            return
+        branch = self.cfg.get("addon_branch", "master")
+        update_avail, _ = updater.check_addon_update(addon_path, branch=branch)
+        if update_avail:
+            self.tray.set_status("Addon wird aktualisiert...")
+            updater.update_addon(addon_path, branch=branch)
+            self.tray.set_status("Addon aktualisiert – /reload ingame")
+
     def update_addon(self):
         addon_path = config.get_addon_full(self.cfg)
         if not addon_path:
             return
+        branch = self.cfg.get("addon_branch", "master")
         self.tray.set_status("Addon wird aktualisiert...")
-        ok = updater.update_addon(addon_path)
+        ok = updater.update_addon(addon_path, branch=branch)
         self.tray.set_status("Addon aktualisiert – /reload ingame" if ok else "Addon-Update fehlgeschlagen")
 
     def update_self(self):

@@ -11,7 +11,7 @@ import config as _config
 import updater as _updater
 import i18n as _i18n
 
-_ICON_PATH = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+_ICON_PATH = _config.resource_path(os.path.join("assets", "icon.png"))
 
 # ---------------------------------------------------------------------------
 # Gemeinsames CSS
@@ -416,8 +416,9 @@ _MAIN_HTML = """<!DOCTYPE html>
     <button class="tab-btn"        data-tab="raids"    onclick="switchTab('raids')"    data-i18n="tab.raids">Raids</button>
     <button class="tab-btn"        data-tab="profil"   onclick="switchTab('profil')"   data-i18n="tab.profil">Profil</button>
     <button class="tab-btn"        data-tab="stats"    onclick="switchTab('stats')"    data-i18n="tab.stats">Statistik</button>
-    <button class="tab-btn"        data-tab="admin"    onclick="switchTab('admin')"    data-i18n="tab.admin" style="display:none">Admin</button>
-    <button class="tab-btn"        data-tab="settings" onclick="switchTab('settings')" data-i18n="tab.settings">Einstellungen</button>
+    <button class="tab-btn"        data-tab="admin"     onclick="switchTab('admin')"     data-i18n="tab.admin" style="display:none">Admin</button>
+    <button class="tab-btn"        data-tab="blacklist" onclick="switchTab('blacklist')" data-i18n="tab.blacklist" style="display:none">Blacklist</button>
+    <button class="tab-btn"        data-tab="settings"  onclick="switchTab('settings')"  data-i18n="tab.settings">Einstellungen</button>
   </div>
 
   <div class="tab-content">
@@ -539,11 +540,21 @@ _MAIN_HTML = """<!DOCTYPE html>
             <div class="version-current">WeltenWandler Raid Tool</div>
             <div class="version-latest" id="addonVersionInfo" data-i18n="settings.checking">Prüfe...</div>
           </div>
-          <label class="toggle">
-            <input type="checkbox" id="addonAutoUpdate" onchange="saveSetting('addon_autoupdate', this.checked)">
-            <span class="toggle-slider"></span>
-          </label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label class="toggle">
+              <input type="checkbox" id="addonAutoUpdate" onchange="saveSetting('addon_autoupdate', this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <span style="font-size:12px;color:var(--muted)" data-i18n="settings.auto_update">Auto Update</span>
+          </div>
           <button class="btn btn-ghost" id="addonUpdateBtn" onclick="doAddonUpdate()" data-i18n="btn.update_now">Jetzt updaten</button>
+        </div>
+        <div id="addonBranchRow" class="settings-row" style="display:none;margin-top:8px">
+          <div class="settings-row-label" data-i18n="settings.addon_branch">Branch</div>
+          <div class="lang-btns">
+            <button class="lang-btn" id="branch-master" onclick="setAddonBranch('master')">master</button>
+            <button class="lang-btn" id="branch-dev"    onclick="setAddonBranch('dev')">dev</button>
+          </div>
         </div>
       </div>
 
@@ -645,6 +656,26 @@ _MAIN_HTML = """<!DOCTYPE html>
 
     </div>
 
+    <!-- Blacklist-Tab -->
+    <div id="tab-blacklist" class="tab-pane">
+
+      <div class="settings-section">
+        <div class="section-title" data-i18n="blacklist.add_title">Item zur Blacklist hinzufügen</div>
+        <div class="settings-row" style="border:none;padding:0;gap:8px;flex-wrap:wrap">
+          <input type="number" id="blItemId" placeholder="Item ID" style="width:120px;flex-shrink:0">
+          <input type="text"   id="blNote"   placeholder="Notiz (optional)" style="flex:1;min-width:120px">
+          <button class="btn btn-primary" onclick="blAddItem()" data-i18n="blacklist.add_btn">Hinzufügen</button>
+        </div>
+        <div id="blAddError" style="color:var(--error);font-size:12px;margin-top:6px;display:none"></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="section-title" data-i18n="blacklist.list_title">Blacklisted Items</div>
+        <div id="blList" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+    </div>
+
   </div>
 
   <!-- Raid erstellen/bearbeiten Modal -->
@@ -732,6 +763,29 @@ _MAIN_HTML = """<!DOCTYPE html>
       </div>
       <div id="lootlisteChecklist" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;padding-right:4px"></div>
       <button class="btn btn-primary" onclick="saveLootlisteModal()" data-i18n="btn.save">Speichern</button>
+    </div>
+  </div>
+
+  <!-- Ersteinrichtung Modal (kein Schließen per Klick außen) -->
+  <div id="setupModal" class="modal-overlay" style="display:none">
+    <div class="modal-box" style="width:460px;gap:16px">
+      <div style="font-size:28px;text-align:center">&#127981;</div>
+      <div class="modal-title" data-i18n="setup.title">Willkommen!</div>
+      <div style="font-size:13px;color:var(--muted);text-align:center;line-height:1.5" data-i18n="setup.desc">
+        Bitte wähle den Pfad zu deiner World of Warcraft Installation aus, damit das Addon synchronisiert werden kann.
+      </div>
+      <div class="form-group">
+        <label data-i18n="settings.addon_path">Addon-Pfad</label>
+        <div class="input-row">
+          <input type="text" id="setupAddonPath" placeholder="E:\\...\\World of Warcraft\\_retail_" style="flex:1">
+          <button class="btn-icon" onclick="browseSetupAddon()" data-i18n="btn.browse">Durchsuchen</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px" data-i18n="settings.addon_path_hint">
+          Nur bis _retail_ — der Rest wird automatisch ergänzt
+        </div>
+      </div>
+      <div id="setupError" style="display:none;color:var(--error);font-size:12px;text-align:center"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="saveSetupAddon()" data-i18n="setup.save">Speichern &amp; Fortfahren</button>
     </div>
   </div>
 
@@ -823,7 +877,7 @@ _MAIN_HTML = """<!DOCTYPE html>
       document.querySelectorAll("[data-i18n]").forEach(el => {
         el.textContent = t(el.dataset.i18n);
       });
-      document.querySelectorAll(".lang-btn").forEach(b => {
+      document.querySelectorAll(".lang-btn[id^='lang-']").forEach(b => {
         b.classList.toggle("active", b.id === "lang-" + LANG);
       });
       if (document.getElementById("tab-raids").classList.contains("active")) loadRaids();
@@ -839,14 +893,23 @@ _MAIN_HTML = """<!DOCTYPE html>
       if (typeof $WowheadPower !== "undefined") $WowheadPower.refreshLinks();
     }
 
+    async function setAddonBranch(branch) {
+      document.querySelectorAll(".lang-btn[id^='branch-']").forEach(b => {
+        b.classList.toggle("active", b.id === "branch-" + branch);
+      });
+      await window.pywebview.api.save_setting("addon_branch", branch);
+      loadVersionInfos();
+    }
+
     function switchTab(name) {
       document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
       document.querySelectorAll(".tab-pane").forEach(p => p.classList.toggle("active", p.id === "tab-" + name));
       if (name === "raids")    { checkPendingNews().then(ok => { if (ok) loadRaids(); }); }
       if (name === "profil")   loadProfileAndChars();
       if (name === "stats")    loadStats();
-      if (name === "admin")    { switchAdminSub("raids"); }
-      if (name === "settings") loadSettings();
+      if (name === "admin")     { switchAdminSub("raids"); }
+      if (name === "blacklist") loadBlacklist();
+      if (name === "settings")  loadSettings();
     }
 
     function setStatus(labelKey, subKey, state) {
@@ -995,6 +1058,12 @@ _MAIN_HTML = """<!DOCTYPE html>
       document.getElementById("runOnStartup").checked    = !!s.run_on_startup;
       document.getElementById("closeToTray").checked     = s.close_to_tray !== false;
       document.getElementById("addonAutoUpdate").checked = !!s.addon_autoupdate;
+
+      // Branch-Selector initialisieren
+      const branch = s.addon_branch || "master";
+      document.querySelectorAll(".lang-btn[id^='branch-']").forEach(b => {
+        b.classList.toggle("active", b.id === "branch-" + branch);
+      });
 
       API_URL = s.api_url || "";
       LANG = s.language || "de";
@@ -1856,6 +1925,55 @@ _MAIN_HTML = """<!DOCTYPE html>
       _adminSelfId   = userId;
       const visible = ["admin","superadmin"].includes(role);
       document.querySelectorAll("[data-tab='admin']").forEach(el => el.style.display = visible ? "" : "none");
+      document.querySelectorAll("[data-tab='blacklist']").forEach(el => el.style.display = visible ? "" : "none");
+      const branchRow = document.getElementById("addonBranchRow");
+      if (branchRow) branchRow.style.display = visible ? "" : "none";
+    }
+
+    // ── Blacklist ─────────────────────────────────────
+    async function loadBlacklist() {
+      const el = document.getElementById("blList");
+      el.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px 0">${t("stats.loading")}</div>`;
+      const data  = await window.pywebview.api.get_blacklist();
+      const items = data || [];
+      if (!items.length) {
+        el.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px 0">${t("blacklist.empty")}</div>`;
+        return;
+      }
+      el.innerHTML = items.map(it => `
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="min-width:160px">${_wowheadLink(it.item_id, null)}</span>
+          <span style="flex:1;color:var(--muted);font-size:12px">${it.note || ""}</span>
+          <span style="font-size:11px;color:var(--muted)">${it.added_by || ""}</span>
+          <button class="btn btn-danger" style="padding:3px 10px;font-size:11px" onclick="blRemoveItem(${it.id})">${t("btn.delete")}</button>
+        </div>`).join("");
+      if (typeof $WowheadPower !== "undefined") $WowheadPower.refreshLinks();
+    }
+
+    async function blAddItem() {
+      const errEl  = document.getElementById("blAddError");
+      const itemId = parseInt(document.getElementById("blItemId").value, 10);
+      const note   = document.getElementById("blNote").value.trim();
+      errEl.style.display = "none";
+      if (!itemId || itemId <= 0) {
+        errEl.textContent = t("blacklist.error_id");
+        errEl.style.display = "";
+        return;
+      }
+      const res = await window.pywebview.api.add_blacklist_item(itemId, note);
+      if (res && res.success) {
+        document.getElementById("blItemId").value = "";
+        document.getElementById("blNote").value   = "";
+        loadBlacklist();
+      } else {
+        errEl.textContent = (res && res.error) || t("blacklist.error_add");
+        errEl.style.display = "";
+      }
+    }
+
+    async function blRemoveItem(blId) {
+      await window.pywebview.api.remove_blacklist_item(blId);
+      loadBlacklist();
     }
 
     function switchAdminSub(name) {
@@ -2156,10 +2274,40 @@ _MAIN_HTML = """<!DOCTYPE html>
       }
     }
 
+    // ── Ersteinrichtung ───────────────────────────────
+    async function browseSetupAddon() {
+      const result = await window.pywebview.api.browse_folder();
+      if (result) document.getElementById("setupAddonPath").value = result;
+    }
+
+    async function saveSetupAddon() {
+      const path = document.getElementById("setupAddonPath").value.trim();
+      const err  = document.getElementById("setupError");
+      if (!path) {
+        err.textContent = t("setup.path_required") || "Bitte einen Pfad angeben.";
+        err.style.display = "";
+        return;
+      }
+      await window.pywebview.api.save_addon_path(path);
+      // auch im Einstellungen-Tab aktualisieren
+      document.getElementById("addonPath").value = path;
+      document.getElementById("setupModal").style.display = "none";
+    }
+
     window.addEventListener("pywebviewready", async () => {
       applyLocale();
       const cfg = await window.pywebview.api.get_settings_extended();
       API_URL = cfg.api_url || "";
+      // Branch-Buttons beim Start initialisieren
+      const branch = cfg.addon_branch || "master";
+      document.querySelectorAll(".lang-btn[id^='branch-']").forEach(b => {
+        b.classList.toggle("active", b.id === "branch-" + branch);
+      });
+      // Ersteinrichtung: Pfad fehlt → Modal zeigen
+      if (!cfg.addon_path_base) {
+        document.getElementById("setupModal").style.display = "flex";
+      }
+
       const s = await window.pywebview.api.get_status();
       setStatus(s.label, s.sub, s.state);
       const u = await window.pywebview.api.get_last_updates();
@@ -2253,11 +2401,6 @@ _LOGIN_HTML = """<!DOCTYPE html>
   <h1>Companion App</h1>
   <div class="card">
     <div class="field">
-      <label>Server URL</label>
-      <input type="text" id="url" value="{url}" placeholder="http://...">
-    </div>
-    <hr class="divider">
-    <div class="field">
       <label>Benutzername</label>
       <input type="text" id="username" autocomplete="username">
     </div>
@@ -2278,7 +2421,6 @@ _LOGIN_HTML = """<!DOCTYPE html>
       const status = document.getElementById('status');
       status.textContent = '';
       const r = await window.pywebview.api.login(
-        document.getElementById('url').value.trim(),
         document.getElementById('username').value.trim(),
         document.getElementById('password').value
       ).catch(() => ({{ success: false, error: 'Verbindungsfehler.' }}));
@@ -2330,7 +2472,7 @@ class _MainApi:
             return {"label": "Nicht eingeloggt", "sub": "", "state": "error"}
         if not ctrl.cfg.get("addon_path_base", ""):
             return {"label": "Addon-Pfad fehlt", "sub": "Bitte in Einstellungen setzen", "state": "error"}
-        return {"label": "Verbunden", "sub": ctrl.cfg.get("api_url", ""), "state": "ok"}
+        return {"label": "Verbunden", "sub": _config.API_URL, "state": "ok"}
 
     def get_last_updates(self):
         ctrl = self._gui.ctrl
@@ -2354,7 +2496,7 @@ class _MainApi:
     def get_settings_extended(self):
         cfg = self._gui.ctrl.cfg
         return {
-            "api_url":            cfg.get("api_url", ""),
+            "api_url":            _config.API_URL,
             "addon_path_base":    cfg.get("addon_path_base", ""),
             "run_on_startup":     _config.get_run_on_startup(),
             "close_to_tray":      cfg.get("close_to_tray", True),
@@ -2363,6 +2505,7 @@ class _MainApi:
             "app_version":        _updater.CURRENT_VERSION,
             "language":           cfg.get("language", "de"),
             "excluded_patch_ids":  cfg.get("excluded_patch_ids", []),
+            "addon_branch":        cfg.get("addon_branch", "master"),
         }
 
     def save_addon_path(self, path: str):
@@ -2395,9 +2538,12 @@ class _MainApi:
 
     # Updates
     def check_addon_version(self):
-        addon_path = _config.get_addon_full(self._gui.ctrl.cfg)
-        avail, ver = _updater.check_addon_update(addon_path, "0.0.0")
-        return {"current": "0.0.0", "latest": ver, "upToDate": not avail}
+        cfg         = self._gui.ctrl.cfg
+        addon_path  = _config.get_addon_full(cfg)
+        branch      = cfg.get("addon_branch", "master")
+        avail, ver  = _updater.check_addon_update(addon_path, branch=branch)
+        local_ver   = _updater._toc_version_local(addon_path)
+        return {"current": local_ver, "latest": ver, "upToDate": not avail}
 
     def check_app_version(self):
         avail, ver = _updater.check_self_update()
@@ -2466,14 +2612,24 @@ class _MainApi:
             loot_scope=loot_scope,
         ) or {}
 
+    # Blacklist
+    def get_blacklist(self):
+        return self._gui.ctrl.api.get_blacklist()
+
+    def add_blacklist_item(self, item_id: int, note: str = ""):
+        return self._gui.ctrl.api.add_blacklist_item(item_id, note)
+
+    def remove_blacklist_item(self, bl_id: int):
+        return self._gui.ctrl.api.remove_blacklist_item(bl_id)
+
 
 class _LoginApi:
     def __init__(self, on_login):
         self._on_login = on_login
         self.window    = None
 
-    def login(self, url, username, password):
-        success, err = self._on_login(url.rstrip("/"), username, password)
+    def login(self, username, password):
+        success, err = self._on_login(username, password)
         return {"success": bool(success), "error": err or ""}
 
 
@@ -2599,7 +2755,7 @@ class GuiManager:
         return True
 
     def _create_login_window(self):
-        html = _render(_LOGIN_HTML, url=self.ctrl.cfg.get("api_url", "http://localhost:5000"))
+        html = _render(_LOGIN_HTML)
         api  = _LoginApi(self._handle_login)
         win  = webview.create_window(
             "WeltenWandler Companion – Login",
@@ -2610,11 +2766,7 @@ class GuiManager:
         api.window      = win
         self._login_win = win
 
-    def _handle_login(self, url, username, password):
-        if url != self.ctrl.cfg.get("api_url"):
-            self.ctrl.cfg["api_url"] = url
-            self.ctrl.api.base_url   = url
-            _config.save(self.ctrl.cfg)
+    def _handle_login(self, username, password):
         success, err = self.ctrl.api.login(username, password)
         if success:
             self._login_win.destroy()
