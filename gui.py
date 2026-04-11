@@ -2535,13 +2535,17 @@ class _MainApi:
         self.window.load_html(html)
 
     def login(self, username, password):
-        """Wird von der Login-Seite nach einem Logout aufgerufen."""
+        """Wird von der Login-Seite aufgerufen (erster Start ohne Token oder nach Logout)."""
         success, err = self._gui.ctrl.api.login(username, password)
         if success:
             html = _render_main(self._gui.ctrl.cfg.get("language", "de"))
             self.window.load_html(html)
             threading.Thread(target=self._gui._post_login, daemon=True).start()
         return {"success": bool(success), "error": err or ""}
+
+    def is_login_page(self):
+        """Dummy — verhindert JS-Fehler falls pywebviewready vor load_html feuert."""
+        return not self._gui.ctrl.api.is_logged_in()
 
     # Aktionen
     def refresh(self):
@@ -2689,10 +2693,8 @@ class GuiManager:
             "QTWEBENGINE_CHROMIUM_FLAGS", "--ignore-certificate-errors"
         )
 
-        if self.ctrl.api.is_logged_in():
-            self._create_main_window()
-        else:
-            self._create_login_window()
+        # Immer dasselbe Fenster — HTML wird je nach Login-Status getauscht
+        self._create_main_window(logged_in=self.ctrl.api.is_logged_in())
 
         threading.Thread(target=self.ctrl.tray.run, daemon=True).start()
         icon = _ICON_PATH if os.path.isfile(_ICON_PATH) else None
@@ -2757,11 +2759,12 @@ class GuiManager:
         if self.ctrl.api.is_logged_in():
             threading.Thread(target=self._post_login, daemon=True).start()
 
-    def _create_main_window(self):
-        api = _MainApi(self)
-        win = webview.create_window(
+    def _create_main_window(self, logged_in: bool = True):
+        html = _render_main(self.ctrl.cfg.get("language", "de")) if logged_in else _render(_LOGIN_HTML)
+        api  = _MainApi(self)
+        win  = webview.create_window(
             "WeltenWandler Companion",
-            html=_render_main(self.ctrl.cfg.get("language", "de")),
+            html=html,
             js_api=api,
             width=900, height=650,
             resizable=True,
@@ -2777,35 +2780,6 @@ class GuiManager:
             return False
         self.ctrl.quit()
         return True
-
-    def _create_login_window(self):
-        html = _render(_LOGIN_HTML)
-        api  = _LoginApi(self._handle_login)
-        win  = webview.create_window(
-            "WeltenWandler Companion – Login",
-            html=html, js_api=api,
-            width=420, height=420,
-            resizable=False,
-        )
-        api.window      = win
-        self._login_win = win
-
-    def _handle_login(self, username, password):
-        success, err = self.ctrl.api.login(username, password)
-        if success:
-            self._login_win.destroy()
-            self._create_main_window()
-            threading.Thread(target=self._post_login, daemon=True).start()
-        return success, err
-
-    def _show_login(self):
-        """Login-Fenster anzeigen und Hauptfenster verstecken."""
-        if self._main_win:
-            try:
-                self._main_win.hide()
-            except Exception:
-                pass
-        self._create_login_window()
 
     def _post_login(self):
         self.ctrl.tray.set_status("Verbunden")
