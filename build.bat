@@ -2,7 +2,7 @@
 setlocal
 
 set NAME=WeltenWandler Companion
-set ICON=assets\icon.png
+set ICON=assets\icon.ico
 set ENTRY=main.py
 
 echo ========================================
