@@ -2292,6 +2292,8 @@ _MAIN_HTML = """<!DOCTYPE html>
       // auch im Einstellungen-Tab aktualisieren
       document.getElementById("addonPath").value = path;
       document.getElementById("setupModal").style.display = "none";
+      // Sofort Daten laden und Status aktualisieren
+      doRefresh();
     }
 
     window.addEventListener("pywebviewready", async () => {
