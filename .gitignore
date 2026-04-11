@@ -6,6 +6,7 @@ __pycache__/
 venv/
 dist/
 build/
+release/
 *.spec
 
 # Konfiguration (enthält lokale Pfade, kein Passwort da keyring)
