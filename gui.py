@@ -5,7 +5,6 @@ import ctypes
 import html as _html
 import json
 import os
-import sys
 import threading
 import webview
 import config as _config
@@ -2699,6 +2698,14 @@ class GuiManager:
         threading.Thread(target=self.ctrl.tray.run, daemon=True).start()
         icon = _ICON_PATH if os.path.isfile(_ICON_PATH) else None
         webview.start(self._on_start, gui="qt", icon=icon)
+        # webview.start() kehrt zurück wenn alle Fenster geschlossen wurden → aufräumen
+        self.ctrl.stop()
+        try:
+            if self.ctrl.tray.icon:
+                self.ctrl.tray.icon.stop()
+        except Exception:
+            pass
+        os._exit(0)
 
     def show_main(self):
         """Hauptfenster anzeigen (aus Tray-Thread)."""
@@ -2734,22 +2741,13 @@ class GuiManager:
             pass
 
     def quit(self):
-        """App sauber beenden."""
-        self.ctrl.stop()
-        # Tray-Icon stoppen
-        try:
-            if self.ctrl.tray.icon:
-                self.ctrl.tray.icon.stop()
-        except Exception:
-            pass
-        # Alle Fenster schließen
+        """App sauber beenden (aus Tray-Menü)."""
+        # Alle Fenster schließen → webview.start() kehrt zurück → cleanup in launch()
         for win in list(webview.windows):
             try:
                 win.destroy()
             except Exception:
                 pass
-        # Prozess forciert beenden (pystray-Threads sind nicht daemon)
-        sys.exit(0)
 
     # ------------------------------------------------------------------
     # Intern
@@ -2778,7 +2776,7 @@ class GuiManager:
         if self.ctrl.cfg.get("close_to_tray", True):
             self._main_win.hide()
             return False
-        self.ctrl.quit()
+        # Fenster wirklich schließen → webview.start() kehrt zurück → cleanup in launch()
         return True
 
     def _post_login(self):
