@@ -111,9 +111,14 @@ def set_run_on_startup(enabled: bool):
             0, winreg.KEY_SET_VALUE,
         )
         if enabled:
-            exe    = sys.executable
-            script = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
-            winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, f'"{exe}" "{script}"')
+            exe = sys.executable
+            # Im PyInstaller-Build ist sys.executable die .exe selbst — kein Script-Argument nötig
+            if getattr(sys, "frozen", False):
+                value = f'"{exe}"'
+            else:
+                script = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
+                value = f'"{exe}" "{script}"'
+            winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, value)
         else:
             try:
                 winreg.DeleteValue(key, _APP_NAME)
