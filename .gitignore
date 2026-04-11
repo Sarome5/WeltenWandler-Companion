@@ -7,6 +7,7 @@ venv/
 dist/
 build/
 release/
+installer/
 *.spec
 
 # Konfiguration (enthält lokale Pfade, kein Passwort da keyring)
