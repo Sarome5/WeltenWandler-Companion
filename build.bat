@@ -32,7 +32,12 @@ echo.
   --add-data "assets;assets" ^
   --hidden-import=pywebview.platforms.qt ^
   --hidden-import=pystray._win32 ^
+  --hidden-import=PyQt6.QtWebEngineWidgets ^
+  --hidden-import=PyQt6.QtWebEngineCore ^
+  --hidden-import=PyQt6.QtWebChannel ^
+  --hidden-import=PyQt6.QtNetwork ^
   --collect-all pywebview ^
+  --collect-all PyQt6 ^
   --distpath "%DISTDIR%" ^
   --noconfirm ^
   "%ENTRY%"
