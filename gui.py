@@ -5,6 +5,7 @@ import ctypes
 import html as _html
 import json
 import os
+import sys
 import threading
 import webview
 import config as _config
@@ -2757,6 +2758,8 @@ class GuiManager:
     # ------------------------------------------------------------------
 
     def _on_start(self):
+        if "--tray" in sys.argv and self._main_win:
+            self._main_win.hide()
         if self.ctrl.api.is_logged_in():
             threading.Thread(target=self._post_login, daemon=True).start()
 
