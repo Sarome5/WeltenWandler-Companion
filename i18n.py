@@ -187,14 +187,32 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "stats.time":         "Zeit",
 
         # Einstellungen – Lootliste
+        "settings.auto_update":     "Auto Update",
+        "settings.addon_branch":    "Addon-Branch",
         "settings.lootliste":       "Lootliste (Addon-Sync)",
         "settings.lootliste_hint":  "Legt fest welche Lootlisten ans Addon \u00fcbertragen werden",
         "settings.ll_all_selected": "Alle ausgew\u00e4hlt",
         "settings.ll_all_on":       "Alle aktivieren",
         "settings.ll_all_off":      "Alle deaktivieren",
 
+        # Blacklist-Tab
+        "tab.blacklist":        "Blacklist",
+        "blacklist.add_title":  "Item zur Blacklist hinzuf\u00fcgen",
+        "blacklist.add_btn":    "Hinzuf\u00fcgen",
+        "blacklist.list_title": "Blacklisted Items",
+        "blacklist.empty":      "Keine Items auf der Blacklist.",
+        "blacklist.error_id":   "Bitte eine g\u00fcltige Item-ID eingeben.",
+        "blacklist.error_add":  "Fehler beim Hinzuf\u00fcgen.",
+
+        # Ersteinrichtung
+        "setup.title":         "Willkommen!",
+        "setup.desc":          "Bitte w\u00e4hle den Pfad zu deiner World of Warcraft Installation aus, damit das Addon synchronisiert werden kann.",
+        "setup.save":          "Speichern & Fortfahren",
+        "setup.path_required": "Bitte einen Pfad angeben.",
+
         # Allgemein
         "btn.cancel": "Abbrechen",
+        "btn.delete": "L\u00f6schen",
     },
 
     "en": {
@@ -380,14 +398,32 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "stats.time":         "Time",
 
         # Settings – Loot List
+        "settings.auto_update":     "Auto Update",
+        "settings.addon_branch":    "Addon Branch",
         "settings.lootliste":       "Loot List (Addon Sync)",
         "settings.lootliste_hint":  "Determines which loot lists are synced to the addon",
         "settings.ll_all_selected": "All selected",
         "settings.ll_all_on":       "Select all",
         "settings.ll_all_off":      "Deselect all",
 
+        # Blacklist Tab
+        "tab.blacklist":        "Blacklist",
+        "blacklist.add_title":  "Add Item to Blacklist",
+        "blacklist.add_btn":    "Add",
+        "blacklist.list_title": "Blacklisted Items",
+        "blacklist.empty":      "No items on the blacklist.",
+        "blacklist.error_id":   "Please enter a valid item ID.",
+        "blacklist.error_add":  "Error adding item.",
+
+        # First setup
+        "setup.title":         "Welcome!",
+        "setup.desc":          "Please select your World of Warcraft installation path so the addon can be synced.",
+        "setup.save":          "Save & Continue",
+        "setup.path_required": "Please enter a path.",
+
         # General
         "btn.cancel": "Cancel",
+        "btn.delete": "Delete",
     },
 }
 
