@@ -30,12 +30,12 @@ class PollingListener:
         self._running = False
 
     def _current_interval(self) -> int:
-        """Kürzeres Intervall wenn ein Raid bald startet (±60/30 Minuten)."""
+        """Kürzeres Intervall wenn ein Raid bald startet oder kürzlich gestartet hat."""
         if self.get_next_raid_time:
             t = self.get_next_raid_time()
             if t is not None:
                 delta = t - time.time()
-                if -1800 <= delta <= 3600:   # 30min nach Start bis 60min vorher
+                if -5400 <= delta <= 3600:   # 90min nach Start bis 60min vorher
                     return self.POLL_INTERVAL_SOON
         return self.POLL_INTERVAL_NORMAL
 
@@ -55,4 +55,8 @@ class PollingListener:
                 interval = self._current_interval()
                 label = "30s (Raid bald)" if interval == self.POLL_INTERVAL_SOON else "120s"
                 print(f"[Polling] Neuer Raid live → Daten werden aktualisiert (Intervall: {label})")
+                self.on_raid_live()
+            elif self._current_interval() == self.POLL_INTERVAL_SOON:
+                # Raid-Zeitfenster aktiv aber kein neues Event → trotzdem refreshen
+                # (z.B. App nach Raid-Start gestartet, kein neues raid_live-Event mehr)
                 self.on_raid_live()
