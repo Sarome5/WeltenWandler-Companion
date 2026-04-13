@@ -22,8 +22,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "status.error":              "Fehler beim Abrufen",
         "status.card_raid":          "Raid-Daten",
         "status.card_stats":         "Statistiken",
+        "status.card_prio":          "Priodaten",
         "status.card_current":       "Aktuell",
         "status.card_not_loaded":    "Noch nicht geladen",
+        "status.prio_reload":        "/reload im Addon ausführen",
 
         # Buttons allgemein
         "btn.refresh":        "Aktualisieren",
@@ -233,8 +235,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "status.error":              "Error fetching data",
         "status.card_raid":          "Raid Data",
         "status.card_stats":         "Statistics",
+        "status.card_prio":          "Prio Data",
         "status.card_current":       "Up to date",
         "status.card_not_loaded":    "Not yet loaded",
+        "status.prio_reload":        "Run /reload in addon",
 
         # Buttons
         "btn.refresh":        "Refresh",

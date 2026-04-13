@@ -203,7 +203,9 @@ _MAIN_HTML = """<!DOCTYPE html>
   .status-info { flex: 1; min-width: 0; }
   .status-label { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .data-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .data-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .data-card.prio-ready { border-color: var(--gold); }
+  .prio-reload-hint { font-size: 11px; color: var(--gold); margin-top: 4px; font-weight: 600; }
   .data-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
   .data-card-title { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
   .data-card-time  { font-size: 13px; color: var(--text); }
@@ -442,6 +444,12 @@ _MAIN_HTML = """<!DOCTYPE html>
           <div class="data-card-title" data-i18n="status.card_stats">Statistiken</div>
           <div class="data-card-time"  id="statsTime">&#8211;</div>
           <div class="data-card-state" id="statsState"></div>
+        </div>
+        <div class="data-card" id="prioCard">
+          <div class="data-card-title" data-i18n="status.card_prio">Priodaten</div>
+          <div class="data-card-time"  id="prioTime">&#8211;</div>
+          <div class="data-card-state" id="prioState"></div>
+          <div class="prio-reload-hint" id="prioReloadHint" style="display:none" data-i18n="status.prio_reload">/reload im Addon ausführen</div>
         </div>
       </div>
       <div class="status-actions">
@@ -919,7 +927,7 @@ _MAIN_HTML = """<!DOCTYPE html>
 
     function setLastUpdate(text) {}
 
-    function setDataCards(raidTime, statsTime) {
+    function setDataCards(raidTime, statsTime, prioTime, reloadNeeded) {
       const rt = document.getElementById("raidTime");
       const st = document.getElementById("statsTime");
       const rs = document.getElementById("raidState");
@@ -936,6 +944,18 @@ _MAIN_HTML = """<!DOCTYPE html>
       } else {
         st.textContent = "–"; ss.textContent = t("status.card_not_loaded"); ss.className = "data-card-state none";
       }
+      const pt   = document.getElementById("prioTime");
+      const ps   = document.getElementById("prioState");
+      const hint = document.getElementById("prioReloadHint");
+      const card = document.getElementById("prioCard");
+      if (prioTime && prioTime !== "–") {
+        pt.textContent = prioTime;
+        ps.textContent = t("status.card_current"); ps.className = "data-card-state ok";
+      } else {
+        pt.textContent = "–"; ps.textContent = t("status.card_not_loaded"); ps.className = "data-card-state none";
+      }
+      if (hint) hint.style.display = reloadNeeded ? "block" : "none";
+      if (card) card.classList.toggle("prio-ready", !!reloadNeeded);
     }
 
     async function doRefresh() { await window.pywebview.api.refresh(); }
@@ -2314,7 +2334,7 @@ _MAIN_HTML = """<!DOCTYPE html>
       const s = await window.pywebview.api.get_status();
       setStatus(s.label, s.sub, s.state);
       const u = await window.pywebview.api.get_last_updates();
-      setDataCards(u.raid, u.stats);
+      setDataCards(u.raid, u.stats, u.prio, u.prio_reload);
       // Show admin tab if user has admin role
       const profile = await window.pywebview.api.get_profile();
       if (profile && profile.role) showAdminTab(profile.role, profile.id || null);
@@ -2479,7 +2499,12 @@ class _MainApi:
 
     def get_last_updates(self):
         ctrl = self._gui.ctrl
-        return {"raid": ctrl.last_update_raid, "stats": ctrl.last_update_stats}
+        return {
+            "raid":        ctrl.last_update_raid,
+            "stats":       ctrl.last_update_stats,
+            "prio":        ctrl.last_update_prio,
+            "prio_reload": ctrl.prio_reload_needed,
+        }
 
     # Raid-Daten
     def get_raid_data(self):
@@ -2734,9 +2759,23 @@ class GuiManager:
         try:
             def _esc(s):
                 return s.replace("\\", "\\\\").replace("'", "\\'")
+            prio_reload_js = "true" if self.ctrl.prio_reload_needed else "false"
             self._main_win.evaluate_js(
                 f"setStatus('{_esc(label)}', '{_esc(sub)}', '{state}');"
-                f"setDataCards('{_esc(self.ctrl.last_update_raid)}', '{_esc(self.ctrl.last_update_stats)}');"
+                f"setDataCards('{_esc(self.ctrl.last_update_raid)}', '{_esc(self.ctrl.last_update_stats)}', '{_esc(self.ctrl.last_update_prio)}', {prio_reload_js});"
+            )
+        except Exception:
+            pass
+
+    def set_app_update_status(self, msg: str):
+        """Update-Statustext im Einstellungen-Tab anzeigen (threadsafe)."""
+        if not self._main_win:
+            return
+        try:
+            safe = msg.replace("\\", "\\\\").replace("'", "\\'")
+            self._main_win.evaluate_js(
+                f"var el = document.getElementById('appVersionInfo');"
+                f"if (el) el.textContent = '{safe}';"
             )
         except Exception:
             pass

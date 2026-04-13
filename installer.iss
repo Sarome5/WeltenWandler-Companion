@@ -1,5 +1,5 @@
 #define AppName "WeltenWandler Companion"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.2"
 #define AppPublisher "WeltenWandler"
 #define AppExeName "WeltenWandler Companion.exe"
 #define BuildDir "release\WeltenWandler Companion"
@@ -52,7 +52,20 @@ Filename: "{app}\{#AppExeName}"; Description: "{#AppName} jetzt starten"; Flags:
 [UninstallRun]
 Filename: "taskkill.exe"; Parameters: "/f /im ""{#AppExeName}"""; Flags: runhidden; RunOnceId: "KillApp"
 
+[InstallDelete]
+; Alte _internal-Inhalte bereinigen bevor neue Dateien kopiert werden
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Code]
+// Laufende Instanz vor dem Upgrade beenden
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssInstall then
+    Exec('taskkill.exe', '/f /im "WeltenWandler Companion.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then

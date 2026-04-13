@@ -93,9 +93,11 @@ class AppController:
         self._stop = False
 
         # Letzte Raid-/Stats-Daten im Speicher
-        self.last_raid_data:   dict | None = None
-        self.last_update_raid: str         = "–"
-        self.last_update_stats: str        = "–"
+        self.last_raid_data:    dict | None = None
+        self.last_update_raid:  str         = "–"
+        self.last_update_stats: str         = "–"
+        self.last_update_prio:  str         = "–"   # Zeitpunkt letzter prioList-Sync
+        self.prio_reload_needed: bool       = False  # True wenn neue Daten → /reload empfohlen
 
     def _get_next_raid_time(self) -> int | None:
         """Gibt den Unix-Timestamp des nächsten/aktuellen Raids zurück (für Polling-Intervall)."""
@@ -147,22 +149,30 @@ class AppController:
         self.gui.set_status("status.updating", config.API_URL, state="loading")
 
         # Raid-Daten
+        self.prio_reload_needed = False  # zurücksetzen – wird unten erneut gesetzt falls nötig
         raid_raw = self.api.get_raid()
         raid_ok  = False
         if raid_raw:
             raid_data = _normalize_raid(raid_raw)
-            # Vollständige Prioliste pro Raid nachladen (nur officer+, 403 wird ignoriert)
+            # Vollständige Prioliste pro Raid nachladen (403 wird ignoriert)
+            prio_synced = False
             for raid in raid_data.get("raids", []):
                 raid_id  = raid.get("raidID")
                 if raid_id:
                     prio_raw = self.api.get_prio_list(raid_id)
                     if prio_raw:
-                        raid["prioList"]  = prio_raw.get("prios", [])
+                        prios = prio_raw.get("prios", [])
+                        raid["prioList"]  = prios
                         raid["superPrio"] = prio_raw.get("superprio", False)
+                        if prios:
+                            prio_synced = True
             raid_ok = lua_writer.write_raid(raid_data, addon_path)
             if raid_ok:
                 self.last_raid_data   = raid_data
                 self.last_update_raid = datetime.now().strftime("%H:%M:%S")
+                if prio_synced:
+                    self.last_update_prio   = datetime.now().strftime("%H:%M:%S")
+                    self.prio_reload_needed = True
 
         # Stats-Daten: ein API-Call, Aggregation erfolgt client-seitig im Addon
         stats_ok  = False
@@ -214,7 +224,10 @@ class AppController:
 
     def update_self(self):
         self.tray.set_status("App wird aktualisiert...")
-        updater.update_self()
+        def _on_status(msg: str):
+            self.tray.set_status(msg)
+            self.gui.set_app_update_status(msg)
+        updater.update_self(on_status=_on_status)
 
 
 # --------------------------------------------------

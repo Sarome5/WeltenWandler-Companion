@@ -1,7 +1,6 @@
 import os
 import sys
 import zipfile
-import shutil
 import requests
 
 ADDON_REPO_OWNER = "Sarome5"
@@ -9,7 +8,7 @@ ADDON_REPO_NAME  = "WeltenWandler-Raid-Tool"
 SELF_REPO        = "Sarome5/WeltenWandler-Companion"
 GH_API           = "https://api.github.com/repos/{}/releases/latest"
 
-CURRENT_VERSION = "1.0.0"
+CURRENT_VERSION = "1.0.2"
 
 
 def _version_newer(remote: str, local: str) -> bool:
@@ -116,15 +115,17 @@ def update_addon(addon_path: str, branch: str = "master") -> bool:
 # SELF UPDATE
 # --------------------------------------------------
 def _get_latest_self() -> tuple[str, str] | tuple[None, None]:
+    """Gibt (version, installer_url) des neuesten Releases zurück."""
     try:
         r = requests.get(GH_API.format(SELF_REPO), timeout=10)
         if r.status_code != 200:
             return None, None
-        data    = r.json()
-        tag     = data.get("tag_name", "").lstrip("v")
-        assets  = data.get("assets", [])
-        zip_url = next((a["browser_download_url"] for a in assets if a["name"].endswith(".zip")), None)
-        return tag, zip_url
+        data        = r.json()
+        tag         = data.get("tag_name", "").lstrip("v")
+        assets      = data.get("assets", [])
+        # Installer-Asset: erste .exe im Release
+        installer   = next((a["browser_download_url"] for a in assets if a["name"].endswith(".exe")), None)
+        return tag, installer
     except Exception:
         return None, None
 
@@ -136,29 +137,49 @@ def check_self_update() -> tuple[bool, str]:
     return False, CURRENT_VERSION
 
 
-def update_self() -> bool:
+def update_self(on_status=None) -> bool:
     """
-    Lädt neue .exe herunter, ersetzt die aktuelle und startet neu.
+    Lädt den neuen Installer herunter und führt ihn silent aus.
+    Der Installer beendet die laufende App automatisch und startet sie danach neu.
     Funktioniert nur im kompilierten (PyInstaller) Modus.
+    on_status: optionaler Callback (str) für Statusmeldungen an die GUI.
     """
-    tag, zip_url = _get_latest_self()
-    if not zip_url:
+    def _status(msg: str):
+        print(f"[Updater] {msg}", flush=True)
+        if on_status:
+            try:
+                on_status(msg)
+            except Exception:
+                pass
+
+    tag, installer_url = _get_latest_self()
+    if not installer_url:
+        _status("Kein Update gefunden.")
         return False
 
     try:
-        r = requests.get(zip_url, timeout=30)
-        tmp_zip = os.path.join(os.path.dirname(sys.executable), "_companion_update.zip")
-        with open(tmp_zip, "wb") as f:
+        import tempfile
+        import subprocess
+
+        _status(f"Download läuft… (v{tag})")
+        r = requests.get(installer_url, timeout=120)
+        r.raise_for_status()
+
+        tmp_dir        = tempfile.mkdtemp()
+        installer_path = os.path.join(tmp_dir, f"WeltenWandler-Companion-Setup-v{tag}.exe")
+        with open(installer_path, "wb") as f:
             f.write(r.content)
 
-        with zipfile.ZipFile(tmp_zip, "r") as z:
-            z.extractall(os.path.dirname(sys.executable))
-
-        os.remove(tmp_zip)
-
-        # Neustart
-        os.execv(sys.executable, sys.argv)
-        return True
+        _status("Wird installiert…")
+        # /SILENT: kein Wizard, aber Fortschrittsanzeige
+        # /CLOSEAPPLICATIONS: schließt laufende Instanzen automatisch
+        subprocess.Popen(
+            [installer_path, "/SILENT", "/CLOSEAPPLICATIONS"],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+        # App beenden – der Installer übernimmt den Rest
+        os._exit(0)
     except Exception as e:
+        _status(f"Update fehlgeschlagen.")
         print(f"[Updater] Self-Update fehlgeschlagen: {e}")
         return False
