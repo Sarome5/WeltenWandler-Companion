@@ -2734,15 +2734,26 @@ class GuiManager:
         os._exit(0)
 
     def show_main(self):
-        """Hauptfenster anzeigen (aus Tray-Thread)."""
+        """Hauptfenster anzeigen und in den Vordergrund holen (aus Tray-Thread)."""
         if self._main_win:
             try:
                 if self._main_win in webview.windows:
                     self._main_win.show()
+                    self._bring_to_front()
                     return
             except Exception:
                 pass
         self._create_main_window()
+
+    def _bring_to_front(self):
+        """Fenster auf Windows in den Vordergrund holen."""
+        try:
+            hwnd = ctypes.windll.user32.FindWindowW(None, "WRT Companion")
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 9)   # SW_RESTORE (falls minimiert)
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
 
     def show_settings(self):
         """Zum Einstellungen-Tab wechseln."""
