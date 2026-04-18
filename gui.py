@@ -2748,10 +2748,23 @@ class GuiManager:
     def _bring_to_front(self):
         """Fenster auf Windows in den Vordergrund holen."""
         try:
-            hwnd = ctypes.windll.user32.FindWindowW(None, "WRT Companion")
-            if hwnd:
-                ctypes.windll.user32.ShowWindow(hwnd, 9)   # SW_RESTORE (falls minimiert)
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
+            user32  = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            hwnd = user32.FindWindowW(None, "WeltenWandler Companion")
+            if not hwnd:
+                return
+            # Falls minimiert: wiederherstellen
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            # AttachThreadInput-Trick: umgeht Windows-Einschränkung für SetForegroundWindow
+            fg_hwnd   = user32.GetForegroundWindow()
+            fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None)
+            my_thread = kernel32.GetCurrentThreadId()
+            if fg_thread != my_thread:
+                user32.AttachThreadInput(fg_thread, my_thread, True)
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+            if fg_thread != my_thread:
+                user32.AttachThreadInput(fg_thread, my_thread, False)
         except Exception:
             pass
 
