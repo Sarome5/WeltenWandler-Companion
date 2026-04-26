@@ -8,7 +8,7 @@ ADDON_REPO_NAME  = "WeltenWandler-Raid-Tool"
 SELF_REPO        = "Sarome5/WeltenWandler-Companion"
 GH_API           = "https://api.github.com/repos/{}/releases/latest"
 
-CURRENT_VERSION = "1.0.5"
+CURRENT_VERSION = "1.0.6"
 
 
 def _version_newer(remote: str, local: str) -> bool:

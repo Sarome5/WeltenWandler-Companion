@@ -1,5 +1,5 @@
 #define AppName "WeltenWandler Companion"
-#define AppVersion "1.0.5"
+#define AppVersion "1.0.6"
 #define AppPublisher "WeltenWandler"
 #define AppExeName "WeltenWandler Companion.exe"
 #define BuildDir "release\WeltenWandler Companion"

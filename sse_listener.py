@@ -22,6 +22,8 @@ class PollingListener:
         self._last_check        = 0
 
     def start(self):
+        if self._thread and self._thread.is_alive():
+            return
         self._running = True
         self._thread  = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -41,8 +43,11 @@ class PollingListener:
 
     def _run(self):
         while self._running:
-            if self.api.is_logged_in():
-                self._poll()
+            try:
+                if self.api.is_logged_in():
+                    self._poll()
+            except Exception as e:
+                print(f"[Polling] Fehler im Poll-Zyklus: {e}", flush=True)
             time.sleep(self._current_interval())
 
     def _poll(self):
@@ -52,6 +57,6 @@ class PollingListener:
         if result:
             self._last_check = result.get("updated_at", int(time.time()))
             if result.get("raid_live"):
-                print(f"[Polling] Neuer Raid live → Daten werden aktualisiert")
+                print("[Polling] Raid live erkannt -> Daten werden aktualisiert", flush=True)
         # Immer aktualisieren – hält Raid-Daten, Statistiken und Priodaten aktuell
         self.on_raid_live()
